@@ -2,17 +2,22 @@
 
 Preventive maintenance tracking for Home Assistant: equipment (boiler, heat pump, air conditioning), IT and network (NAS, router, home automation), and vehicles (motorcycles, cars, bicycles).
 
-> **Status: early development.** The repository currently contains the integration skeleton and the first maintenance templates. Sensors, the "done" button and services are not implemented yet.
+> **Status: early development (MVP, not yet tested in a live Home Assistant).** Assets, time and distance triggers, remaining sensors, overdue flags, the "done" button and services are implemented. Hour-based triggers are not implemented yet.
 
-## Features (planned for the MVP)
+## Features
 
 - Assets with a category: `equipment`, `it`, `vehicle`.
-- Maintenance tasks defined by **templates** in YAML, so anyone can contribute a new asset type without touching code.
-- Triggers by **time** (every N days or months), by **distance** (km, for vehicles) and by **hours** of operation.
-- Per-task sensors for time or km remaining, and an "overdue" binary sensor.
-- A button to mark a task as done, which resets the counter.
-- An odometer service for vehicles, so no external sensor is needed.
-- English and Spanish interface.
+- Maintenance tasks created from **templates** in YAML, so anyone can contribute a new asset type without touching code.
+- Triggers by **time** (every N days or months) and by **distance** (km, for vehicles).
+- Per task: a sensor with the remaining days (or km), a sensor for "overdue", and a button to mark it as done.
+- Services: `add_asset`, `mark_done` and `set_odometer`.
+- Entity names follow the Home Assistant language (English or Spanish).
+
+## Usage
+
+Create an asset from a template with the `maintenance_hub.add_asset` service. The asset id is written to the Home Assistant log and appears in the attributes of its entities. Use it with `maintenance_hub.mark_done` and `maintenance_hub.set_odometer`.
+
+Configuration is through services and templates only for now; there is no config flow yet.
 
 ## Installation (HACS)
 
@@ -52,17 +57,22 @@ MIT. See [LICENSE](LICENSE).
 
 Seguimiento de mantenimiento preventivo para Home Assistant: equipamiento (caldera, calentador, aire acondicionado, clima), informática y red (NAS, router, domótica) y vehículos (motos, coches, bicicletas).
 
-> **Estado: en desarrollo temprano.** El repositorio contiene de momento el esqueleto de la integración y las primeras plantillas de mantenimiento. Sensores, botón de "hecho" y servicios aún no están implementados.
+> **Estado: desarrollo temprano (MVP, aún sin probar en un Home Assistant real).** Están implementados los activos, los disparadores por tiempo y por distancia, los sensores de restante, el indicador de vencida, el botón de "hecho" y los servicios. Los disparadores por horas todavía no están implementados.
 
-## Funcionalidades previstas (MVP)
+## Funcionalidades
 
 - Activos con categoría: `equipment`, `it`, `vehicle`.
-- Tareas de mantenimiento definidas con **plantillas** en YAML, para que cualquiera pueda aportar un nuevo tipo de activo sin tocar código.
-- Disparadores por **tiempo** (cada N días o meses), por **distancia** (km, para vehículos) y por **horas** de funcionamiento.
-- Sensores por tarea con el tiempo o los km restantes, y un sensor binario de "vencida".
-- Botón para marcar una tarea como hecha, que reinicia el contador.
-- Servicio de odómetro para vehículos, sin necesidad de sensores externos.
-- Interfaz en inglés y español.
+- Tareas de mantenimiento creadas desde **plantillas** en YAML, para que cualquiera pueda aportar un nuevo tipo de activo sin tocar código.
+- Disparadores por **tiempo** (cada N días o meses) y por **distancia** (km, para vehículos).
+- Por tarea: un sensor con los días (o km) restantes, un sensor de "vencida" y un botón para marcarla como hecha.
+- Servicios: `add_asset`, `mark_done` y `set_odometer`.
+- Los nombres de las entidades siguen el idioma de Home Assistant (inglés o español).
+
+## Uso
+
+Crea un activo a partir de una plantilla con el servicio `maintenance_hub.add_asset`. El id del activo se escribe en el registro de Home Assistant y aparece en los atributos de sus entidades. Con ese id usas `maintenance_hub.mark_done` y `maintenance_hub.set_odometer`.
+
+De momento la configuración se hace solo con servicios y plantillas; aún no hay flujo de configuración en la interfaz.
 
 ## Instalación (HACS)
 

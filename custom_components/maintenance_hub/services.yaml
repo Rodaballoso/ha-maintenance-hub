@@ -1,0 +1,62 @@
+add_asset:
+  name: Add asset
+  description: Add an asset and create its maintenance tasks from a template. The asset id is written to the Home Assistant log.
+  fields:
+    name:
+      name: Name
+      description: Name of the asset, for example "Boiler" or "Motorcycle".
+      required: true
+      selector:
+        text:
+    asset_type:
+      name: Asset type
+      description: Template to use, for example boiler, nas or motorcycle.
+      required: true
+      selector:
+        text:
+    odometer_km:
+      name: Odometer
+      description: Current odometer in km. Only needed for distance-based tasks.
+      required: false
+      selector:
+        number:
+          min: 0
+          mode: box
+          unit_of_measurement: km
+
+mark_done:
+  name: Mark task done
+  description: Record that a task was done now, at the current odometer.
+  fields:
+    asset_id:
+      name: Asset id
+      description: Id of the asset, shown in the attributes of its entities.
+      required: true
+      selector:
+        text:
+    task_id:
+      name: Task id
+      description: Id of the task inside the template, shown in the attributes of its entities.
+      required: true
+      selector:
+        text:
+
+set_odometer:
+  name: Set odometer
+  description: Update the odometer of an asset. Used by distance-based tasks.
+  fields:
+    asset_id:
+      name: Asset id
+      description: Id of the asset, shown in the attributes of its entities.
+      required: true
+      selector:
+        text:
+    odometer_km:
+      name: Odometer
+      description: Current odometer in km.
+      required: true
+      selector:
+        number:
+          min: 0
+          mode: box
+          unit_of_measurement: km
