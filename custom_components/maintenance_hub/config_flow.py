@@ -49,17 +49,20 @@ class MaintenanceHubConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(step_id="user")
 
 
-def _name_schema() -> vol.Schema:
-    return vol.Schema(
-        {
-            vol.Required("name"): selector.TextSelector(),
-            vol.Optional("odometer_km"): selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    min=0, mode=selector.NumberSelectorMode.BOX, unit_of_measurement="km"
-                )
-            ),
-        }
-    )
+def _needs_odometer(template: dict) -> bool:
+    """Only assets with distance-based tasks ask for the odometer."""
+    return any(TRIGGER_KM in task.get("trigger", {}) for task in template.get("tasks", []))
+
+
+def _name_schema(template: dict) -> vol.Schema:
+    fields: dict[Any, Any] = {vol.Required("name"): selector.TextSelector()}
+    if _needs_odometer(template):
+        fields[vol.Required("odometer_km")] = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0, mode=selector.NumberSelectorMode.BOX, unit_of_measurement="km"
+            )
+        )
+    return vol.Schema(fields)
 
 
 def _interval_selector() -> selector.NumberSelector:
@@ -125,11 +128,11 @@ class AssetSubentryFlow(ConfigSubentryFlow):
                 template, user_input["name"], asset_type, user_input.get("odometer_km")
             )
             self._reload()
-            return self.async_create_subentry(title=user_input["name"], data=data)
+            return self.async_create_entry(title=user_input["name"], data=data)
 
         return self.async_show_form(
             step_id=f"add_{asset_type}",
-            data_schema=_name_schema(),
+            data_schema=_name_schema(template),
         )
 
     async def async_step_reconfigure(
