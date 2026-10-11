@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Maintenance Hub",
+        "description": "Set up Maintenance Hub. Assets and their maintenance tasks are added with the add_asset service, using the templates shipped with the integration."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Maintenance Hub is already configured."
+    }
+  }
+}

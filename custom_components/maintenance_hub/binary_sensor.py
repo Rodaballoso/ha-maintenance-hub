@@ -6,10 +6,10 @@ from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
 )
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 from .const import DOMAIN, SIGNAL_ASSET_ADDED
 from .entity import MaintenanceTaskEntity, entity_unique_id
@@ -35,11 +35,10 @@ def _entities_for_asset(store: MaintenanceStore, asset_id: str) -> list[Maintena
     return [MaintenanceOverdueSensor(store, asset_id, tid) for tid in store.task_ids(asset_id)]
 
 
-async def async_setup_platform(
+async def async_setup_entry(
     hass: HomeAssistant,
-    config: ConfigType,
+    entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
-    discovery_info: DiscoveryInfoType | None = None,
 ) -> None:
     """Create overdue sensors for existing assets and for assets added later."""
     store: MaintenanceStore = hass.data[DOMAIN]["store"]
@@ -53,4 +52,4 @@ async def async_setup_platform(
     def _on_asset_added(asset_id: str) -> None:
         async_add_entities(_entities_for_asset(store, asset_id))
 
-    async_dispatcher_connect(hass, SIGNAL_ASSET_ADDED, _on_asset_added)
+    entry.async_on_unload(async_dispatcher_connect(hass, SIGNAL_ASSET_ADDED, _on_asset_added))

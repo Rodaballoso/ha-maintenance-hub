@@ -1,20 +1,13 @@
 {
-  "title": "Maintenance Hub",
-  "entity": {
-    "sensor": {
-      "remaining": {
-        "name": "{task}: restante"
+  "config": {
+    "step": {
+      "user": {
+        "title": "Maintenance Hub",
+        "description": "Configura Maintenance Hub. Los activos y sus tareas de mantenimiento se añaden con el servicio add_asset, usando las plantillas incluidas en la integración."
       }
     },
-    "binary_sensor": {
-      "overdue": {
-        "name": "{task}: vencida"
-      }
-    },
-    "button": {
-      "mark_done": {
-        "name": "{task}: hecho"
-      }
+    "abort": {
+      "single_instance_allowed": "Maintenance Hub ya está configurado."
     }
   }
 }

@@ -10,10 +10,10 @@ import voluptuous as vol
 import yaml
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.discovery import async_load_platform
 from homeassistant.helpers.event import async_track_time_interval
 
 from .const import (
@@ -27,7 +27,7 @@ from .store import MaintenanceStore
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = ("sensor", "binary_sensor", "button")
+PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.BUTTON]
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 REFRESH_INTERVAL = timedelta(hours=1)
 
@@ -64,36 +64,20 @@ def load_templates() -> dict[str, dict]:
     return templates
 
 
-async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Set up the integration from configuration.yaml (no config flow yet)."""
-    hass.data.setdefault(DOMAIN, {})
-
-    templates = await hass.async_add_executor_job(load_templates)
-    store = MaintenanceStore(hass, templates)
-    await store.async_load()
-    hass.data[DOMAIN]["store"] = store
-    _LOGGER.debug("Loaded %d maintenance templates", len(templates))
-
-    @callback
-    def _refresh(_now) -> None:
-        store.async_refresh()
-
-    # Remaining days change every day, so refresh the entities periodically.
-    async_track_time_interval(hass, _refresh, REFRESH_INTERVAL)
-
-    for platform in PLATFORMS:
-        await async_load_platform(hass, platform, DOMAIN, {}, config)
-
-    _register_services(hass, store)
-    return True
+def _get_store(hass: HomeAssistant) -> MaintenanceStore:
+    """Return the store, or fail if the integration is not set up."""
+    store = hass.data.get(DOMAIN, {}).get("store")
+    if store is None:
+        raise HomeAssistantError("Maintenance Hub is not set up")
+    return store
 
 
-def _register_services(hass: HomeAssistant, store: MaintenanceStore) -> None:
-    """Register the integration services."""
+def _register_services(hass: HomeAssistant) -> None:
+    """Register the integration services once."""
 
     async def handle_add_asset(call: ServiceCall) -> None:
         try:
-            asset_id = await store.async_add_asset(
+            asset_id = await _get_store(hass).async_add_asset(
                 call.data["name"],
                 call.data["asset_type"],
                 call.data.get("odometer_km"),
@@ -104,20 +88,20 @@ def _register_services(hass: HomeAssistant, store: MaintenanceStore) -> None:
 
     async def handle_remove_asset(call: ServiceCall) -> None:
         try:
-            await store.async_remove_asset(call.data["asset_id"])
+            await _get_store(hass).async_remove_asset(call.data["asset_id"])
         except ValueError as err:
             raise HomeAssistantError(str(err)) from err
         _LOGGER.info("Removed maintenance asset %s", call.data["asset_id"])
 
     async def handle_mark_done(call: ServiceCall) -> None:
         try:
-            await store.async_mark_done(call.data["asset_id"], call.data["task_id"])
+            await _get_store(hass).async_mark_done(call.data["asset_id"], call.data["task_id"])
         except ValueError as err:
             raise HomeAssistantError(str(err)) from err
 
     async def handle_set_odometer(call: ServiceCall) -> None:
         try:
-            await store.async_set_odometer(
+            await _get_store(hass).async_set_odometer(
                 call.data["asset_id"], call.data["odometer_km"]
             )
         except ValueError as err:
@@ -137,11 +121,35 @@ def _register_services(hass: HomeAssistant, store: MaintenanceStore) -> None:
     )
 
 
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Set up the integration domain: services are registered here."""
+    hass.data.setdefault(DOMAIN, {})
+    _register_services(hass)
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up from a config entry (reserved for the config-flow phase)."""
+    """Set up Maintenance Hub from a config entry added in the UI."""
+    templates = await hass.async_add_executor_job(load_templates)
+    store = MaintenanceStore(hass, templates)
+    await store.async_load()
+    hass.data[DOMAIN]["store"] = store
+    _LOGGER.debug("Loaded %d maintenance templates", len(templates))
+
+    @callback
+    def _refresh(_now) -> None:
+        store.async_refresh()
+
+    # Remaining days change every day, so refresh the entities periodically.
+    entry.async_on_unload(async_track_time_interval(hass, _refresh, REFRESH_INTERVAL))
+
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
-    return True
+    """Unload Maintenance Hub."""
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
+        hass.data[DOMAIN].pop("store", None)
+    return unload_ok

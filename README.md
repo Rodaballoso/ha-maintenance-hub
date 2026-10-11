@@ -18,7 +18,7 @@ Preventive maintenance tracking for Home Assistant: equipment (boiler, heat pump
 
 Create an asset from a template with the `maintenance_hub.add_asset` service. The asset id is written to the Home Assistant log and appears in the attributes of its entities. Use it with `maintenance_hub.mark_done` and `maintenance_hub.set_odometer`.
 
-Configuration is through services and templates only for now; there is no config flow yet.
+Setup is done from the UI: **Settings → Devices & services → Add integration → Maintenance Hub**. Only one instance is allowed. Assets are then managed with services.
 
 ## Installation (HACS)
 
@@ -74,7 +74,7 @@ Seguimiento de mantenimiento preventivo para Home Assistant: equipamiento (calde
 
 Crea un activo a partir de una plantilla con el servicio `maintenance_hub.add_asset`. El id del activo se escribe en el registro de Home Assistant y aparece en los atributos de sus entidades. Con ese id usas `maintenance_hub.mark_done` y `maintenance_hub.set_odometer`.
 
-De momento la configuración se hace solo con servicios y plantillas; aún no hay flujo de configuración en la interfaz.
+La integración se añade desde la interfaz: **Ajustes → Dispositivos y servicios → Añadir integración → Maintenance Hub**. Solo se permite una instancia. Los activos se gestionan después con servicios.
 
 ## Instalación (HACS)
 
