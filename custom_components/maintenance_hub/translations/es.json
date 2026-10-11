@@ -1,0 +1,20 @@
+{
+  "title": "Maintenance Hub",
+  "entity": {
+    "sensor": {
+      "remaining": {
+        "name": "{task}: restante"
+      }
+    },
+    "binary_sensor": {
+      "overdue": {
+        "name": "{task}: vencida"
+      }
+    },
+    "button": {
+      "mark_done": {
+        "name": "{task}: hecho"
+      }
+    }
+  }
+}

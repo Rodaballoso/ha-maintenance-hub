@@ -1,0 +1,17 @@
+asset_type: motorcycle
+category: vehicle
+name: Motorcycle
+name_es: Moto
+tasks:
+  - id: oil_change
+    name: Oil change
+    name_es: Cambio de aceite
+    trigger: { km: 6000, months: 12 }
+  - id: brake_check
+    name: Brake check
+    name_es: Revisión de frenos
+    trigger: { km: 10000 }
+  - id: chain
+    name: Lubricate and adjust chain
+    name_es: Lubricar y tensar cadena
+    trigger: { km: 500 }

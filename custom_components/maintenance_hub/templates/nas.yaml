@@ -1,0 +1,13 @@
+asset_type: nas
+category: it
+name: NAS
+name_es: NAS
+tasks:
+  - id: scrub
+    name: Integrity scrub
+    name_es: Scrub de integridad
+    trigger: { days: 30 }
+  - id: restore_test
+    name: Backup restore test
+    name_es: Prueba de restauración de backup
+    trigger: { months: 3 }

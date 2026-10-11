@@ -1,0 +1,13 @@
+asset_type: boiler
+category: equipment
+name: Boiler
+name_es: Caldera
+tasks:
+  - id: annual_service
+    name: Annual service
+    name_es: Revisión anual
+    trigger: { months: 12 }
+  - id: filter_clean
+    name: Clean filter
+    name_es: Limpiar filtro
+    trigger: { months: 6 }
