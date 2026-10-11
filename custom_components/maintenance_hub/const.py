@@ -18,7 +18,7 @@ TRIGGER_HOURS = "hours"  # reserved: not evaluated yet
 SUPPORTED_TRIGGERS = (TRIGGER_DAYS, TRIGGER_MONTHS, TRIGGER_KM)
 
 # Storage (history of maintenance records only; assets live in subentries)
-STORAGE_VERSION = 2
+STORAGE_VERSION = 1  # same as 0.2.x, so existing data is read directly
 STORAGE_KEY = f"{DOMAIN}.data"
 
 # Services
