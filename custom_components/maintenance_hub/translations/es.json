@@ -3,11 +3,48 @@
     "step": {
       "user": {
         "title": "Maintenance Hub",
-        "description": "Configura Maintenance Hub. Los activos y sus tareas de mantenimiento se añaden con el servicio add_asset, usando las plantillas incluidas en la integración."
+        "description": "Configura Maintenance Hub. Después añade tus activos desde la página de la integración."
       }
     },
     "abort": {
       "single_instance_allowed": "Maintenance Hub ya está configurado."
+    }
+  },
+  "config_subentries": {
+    "asset": {
+      "entry_type": "Activo",
+      "initiate_flow": {
+        "user": "Añadir activo",
+        "reconfigure": "Editar intervalos del activo"
+      },
+      "step": {
+        "user": {
+          "title": "Añadir activo",
+          "description": "Elige el tipo de activo. Sus tareas de mantenimiento y los intervalos por defecto vienen de la plantilla.",
+          "data": {
+            "name": "Nombre",
+            "asset_type": "Tipo de activo",
+            "odometer_km": "Odómetro actual (km)"
+          },
+          "data_description": {
+            "odometer_km": "Solo es necesario para tareas basadas en distancia, como el mantenimiento de vehículos."
+          }
+        },
+        "reconfigure": {
+          "title": "Editar activo",
+          "description": "Define el intervalo de cada tarea. Deja un campo vacío para ignorar esa unidad. Cada tarea necesita al menos un intervalo.\n\nLos campos se llaman <tarea>_<unidad>, donde la unidad es months (meses), days (días) o km:\n{tasks}",
+          "data": {
+            "name": "Nombre"
+          }
+        }
+      },
+      "error": {
+        "no_trigger": "Cada tarea necesita al menos un intervalo."
+      },
+      "abort": {
+        "unknown_template": "Tipo de activo desconocido.",
+        "reconfigure_successful": "Activo actualizado."
+      }
     }
   }
 }

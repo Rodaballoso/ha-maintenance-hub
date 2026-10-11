@@ -3,11 +3,48 @@
     "step": {
       "user": {
         "title": "Maintenance Hub",
-        "description": "Set up Maintenance Hub. Assets and their maintenance tasks are added with the add_asset service, using the templates shipped with the integration."
+        "description": "Set up Maintenance Hub. Then add your assets from the integration page."
       }
     },
     "abort": {
       "single_instance_allowed": "Maintenance Hub is already configured."
+    }
+  },
+  "config_subentries": {
+    "asset": {
+      "entry_type": "Asset",
+      "initiate_flow": {
+        "user": "Add asset",
+        "reconfigure": "Edit asset intervals"
+      },
+      "step": {
+        "user": {
+          "title": "Add asset",
+          "description": "Choose the type of asset. Its maintenance tasks and default intervals come from the template.",
+          "data": {
+            "name": "Name",
+            "asset_type": "Asset type",
+            "odometer_km": "Current odometer (km)"
+          },
+          "data_description": {
+            "odometer_km": "Only needed for tasks based on distance, such as vehicle maintenance."
+          }
+        },
+        "reconfigure": {
+          "title": "Edit asset",
+          "description": "Set the interval for each task. Leave a field empty to ignore that unit. Each task needs at least one interval.\n\nFields are named <task>_<unit>, where unit is months, days or km:\n{tasks}",
+          "data": {
+            "name": "Name"
+          }
+        }
+      },
+      "error": {
+        "no_trigger": "Each task needs at least one interval."
+      },
+      "abort": {
+        "unknown_template": "Unknown asset type.",
+        "reconfigure_successful": "Asset updated."
+      }
     }
   }
 }

@@ -7,11 +7,10 @@ from typing import Any
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfLength, UnitOfTime
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, SIGNAL_ASSET_ADDED
+from .const import DOMAIN
 from .entity import MaintenanceTaskEntity, entity_unique_id
 from .store import MaintenanceStore
 
@@ -53,25 +52,16 @@ class MaintenanceRemainingSensor(MaintenanceTaskEntity, SensorEntity):
         }
 
 
-def _entities_for_asset(store: MaintenanceStore, asset_id: str) -> list[SensorEntity]:
-    return [MaintenanceRemainingSensor(store, asset_id, tid) for tid in store.task_ids(asset_id)]
-
-
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Create sensors for existing assets and for assets added later."""
+    """Create one sensor per task, grouped under each asset's subentry."""
     store: MaintenanceStore = hass.data[DOMAIN]["store"]
-
-    entities: list[SensorEntity] = []
     for asset_id in store.asset_ids():
-        entities.extend(_entities_for_asset(store, asset_id))
-    async_add_entities(entities)
-
-    @callback
-    def _on_asset_added(asset_id: str) -> None:
-        async_add_entities(_entities_for_asset(store, asset_id))
-
-    entry.async_on_unload(async_dispatcher_connect(hass, SIGNAL_ASSET_ADDED, _on_asset_added))
+        entities = [
+            MaintenanceRemainingSensor(store, asset_id, task_id)
+            for task_id in store.task_ids(asset_id)
+        ]
+        async_add_entities(entities, config_subentry_id=asset_id)

@@ -1,4 +1,8 @@
-"""Persistent data and maintenance logic for Maintenance Hub."""
+"""Maintenance logic and history for Maintenance Hub.
+
+Assets and their intervals live in config subentries (editable from the UI).
+This store only keeps the maintenance history per task and computes status.
+"""
 
 from __future__ import annotations
 
@@ -6,8 +10,8 @@ import calendar
 from datetime import date, timedelta
 import logging
 from typing import Any
-import uuid
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.dispatcher import async_dispatcher_send
@@ -15,14 +19,11 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import (
-    CATEGORY_EQUIPMENT,
     DOMAIN,
-    SIGNAL_ASSET_ADDED,
-    SIGNAL_ASSET_REMOVED,
     SIGNAL_UPDATED,
     STORAGE_KEY,
     STORAGE_VERSION,
-    SUPPORTED_TRIGGERS,
+    SUBENTRY_ASSET,
     TRIGGER_DAYS,
     TRIGGER_KM,
     TRIGGER_MONTHS,
@@ -45,23 +46,42 @@ def add_months(day: date, months: int) -> date:
     return date(year, month, min(day.day, last_day))
 
 
-class MaintenanceStore:
-    """Holds assets and their maintenance tasks, persisted in .storage."""
+def _key(asset_id: str, task_id: str) -> str:
+    return f"{asset_id}:{task_id}"
 
-    def __init__(self, hass: HomeAssistant, templates: dict[str, dict]) -> None:
+
+class MaintenanceStore:
+    """Maintenance history per task, and status computed from subentry data."""
+
+    def __init__(
+        self, hass: HomeAssistant, entry: ConfigEntry, templates: dict[str, dict]
+    ) -> None:
         self.hass = hass
+        self.entry = entry
         self.templates = templates
         self._store: Store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
-        self._assets: dict[str, dict[str, Any]] = {}
+        # "asset_id:task_id" -> {"last_date": iso, "last_km": float | None}
+        self._history: dict[str, dict[str, Any]] = {}
+        # Assets saved by version 0.2.x, migrated to subentries on setup.
+        self.legacy_assets: dict[str, dict[str, Any]] = {}
 
     async def async_load(self) -> None:
-        """Load the saved assets from disk."""
-        data = await self._store.async_load()
-        if data:
-            self._assets = data.get("assets", {})
+        """Load history from disk, converting the 0.2.x format if needed."""
+        data = await self._store.async_load() or {}
+        if "assets" in data:
+            self.legacy_assets = data["assets"]
+            for asset_id, asset in self.legacy_assets.items():
+                for task_id, task in asset.get("tasks", {}).items():
+                    self._history[_key(asset_id, task_id)] = {
+                        "last_date": task["last_date"],
+                        "last_km": task.get("last_km"),
+                    }
+            _LOGGER.info("Migrating %d asset(s) from version 0.2.x", len(self.legacy_assets))
+        else:
+            self._history = data.get("history", {})
 
     async def _async_save(self) -> None:
-        await self._store.async_save({"assets": self._assets})
+        await self._store.async_save({"history": self._history})
 
     @property
     def language(self) -> str:
@@ -73,55 +93,60 @@ class MaintenanceStore:
         """Return a localized UI label."""
         return LABELS[self.language][key]
 
+    def _today(self) -> date:
+        return dt_util.now().date()
+
     def asset_ids(self) -> list[str]:
-        """Return all asset ids."""
-        return list(self._assets)
+        """Return the ids of all assets (one per asset subentry)."""
+        return [
+            sub_id
+            for sub_id, sub in self.entry.subentries.items()
+            if sub.subentry_type == SUBENTRY_ASSET
+        ]
+
+    def _asset(self, asset_id: str) -> dict[str, Any]:
+        sub = self.entry.subentries.get(asset_id)
+        if sub is None or sub.subentry_type != SUBENTRY_ASSET:
+            raise ValueError(f"Unknown asset '{asset_id}'")
+        return dict(sub.data)
+
+    def _task(self, asset_id: str, task_id: str) -> dict[str, Any]:
+        task = self._asset(asset_id)["tasks"].get(task_id)
+        if task is None:
+            raise ValueError(f"Unknown task '{task_id}'")
+        return dict(task)
 
     def task_ids(self, asset_id: str) -> list[str]:
         """Return the task ids of an asset."""
-        return list(self._get_asset(asset_id)["tasks"])
+        return list(self._asset(asset_id)["tasks"])
 
     def asset_summary(self, asset_id: str) -> tuple[str, str]:
         """Return (asset name, template name) for device registration."""
-        asset = self._get_asset(asset_id)
+        asset = self._asset(asset_id)
         template = self.templates.get(asset["asset_type"], {})
         return asset["name"], template.get("name", asset["asset_type"])
 
     def task_name(self, asset_id: str, task_id: str) -> str:
         """Return the task name in the installation language."""
-        task = self._get_task(self._get_asset(asset_id), task_id)
+        task = self._task(asset_id, task_id)
         if self.language == "es" and task.get("name_es"):
             return task["name_es"]
         return task["name"]
 
-    def _get_asset(self, asset_id: str) -> dict[str, Any]:
-        asset = self._assets.get(asset_id)
-        if asset is None:
-            raise ValueError(f"Unknown asset '{asset_id}'")
-        return asset
-
-    @staticmethod
-    def _get_task(asset: dict[str, Any], task_id: str) -> dict[str, Any]:
-        task = asset["tasks"].get(task_id)
-        if task is None:
-            raise ValueError(f"Unknown task '{task_id}'")
-        return task
-
-    def _today(self) -> date:
-        return dt_util.now().date()
-
     def status(self, asset_id: str, task_id: str) -> dict[str, Any]:
         """Compute remaining days/km and overdue state for one task."""
-        asset = self._get_asset(asset_id)
-        task = self._get_task(asset, task_id)
+        asset = self._asset(asset_id)
+        task = self._task(asset_id, task_id)
         trigger = task["trigger"]
         today = self._today()
+        record = self._history.get(_key(asset_id, task_id), {})
+        odometer = asset.get("odometer_km")
 
         remaining_days = None
         due_date = None
         overdue = False
         if TRIGGER_DAYS in trigger or TRIGGER_MONTHS in trigger:
-            last = date.fromisoformat(task["last_date"])
+            last = date.fromisoformat(record.get("last_date", today.isoformat()))
             due_date = add_months(last, trigger.get(TRIGGER_MONTHS, 0)) + timedelta(
                 days=trigger.get(TRIGGER_DAYS, 0)
             )
@@ -129,10 +154,9 @@ class MaintenanceStore:
             overdue = remaining_days < 0
 
         remaining_km = None
-        odometer = asset.get("odometer_km")
-        if TRIGGER_KM in trigger and odometer is not None and task.get("last_km") is not None:
-            used = odometer - task["last_km"]
-            remaining_km = round(trigger[TRIGGER_KM] - used, 1)
+        last_km = record.get("last_km")
+        if TRIGGER_KM in trigger and odometer is not None and last_km is not None:
+            remaining_km = round(trigger[TRIGGER_KM] - (odometer - last_km), 1)
             overdue = overdue or remaining_km < 0
 
         return {
@@ -144,84 +168,78 @@ class MaintenanceStore:
             "overdue": overdue,
         }
 
-    async def async_add_asset(
-        self, name: str, asset_type: str, odometer_km: float | None = None
-    ) -> str:
-        """Create an asset and its tasks from a template. Returns the asset id."""
-        template = self.templates.get(asset_type)
-        if template is None:
-            raise ValueError(f"Unknown asset type '{asset_type}'")
+    def odometer(self, asset_id: str) -> float | None:
+        """Return the current odometer of an asset."""
+        return self._asset(asset_id).get("odometer_km")
 
+    async def async_sync(self) -> None:
+        """Create history for new tasks and drop history of removed ones."""
         today = self._today().isoformat()
-        tasks: dict[str, dict[str, Any]] = {}
-        for task in template.get("tasks", []):
-            trigger = {
-                key: value
-                for key, value in task.get("trigger", {}).items()
-                if key in SUPPORTED_TRIGGERS
-            }
-            if not trigger:
-                _LOGGER.warning(
-                    "Task %s in %s has no supported trigger", task.get("id"), asset_type
-                )
-                continue
-            tasks[task["id"]] = {
-                "name": task["name"],
-                "name_es": task.get("name_es"),
-                "trigger": trigger,
-                # Start counting from today, so new tasks are not overdue.
-                "last_date": today,
-                "last_km": odometer_km,
-            }
-
-        asset_id = uuid.uuid4().hex[:8]
-        self._assets[asset_id] = {
-            "name": name,
-            "asset_type": asset_type,
-            "category": template.get("category", CATEGORY_EQUIPMENT),
-            "odometer_km": odometer_km,
-            "tasks": tasks,
-        }
-        await self._async_save()
-        async_dispatcher_send(self.hass, SIGNAL_ASSET_ADDED, asset_id)
-        return asset_id
-
-    async def async_remove_asset(self, asset_id: str) -> None:
-        """Delete an asset, its entities and its device."""
-        self._get_asset(asset_id)
-        del self._assets[asset_id]
-        await self._async_save()
-        async_dispatcher_send(self.hass, SIGNAL_ASSET_REMOVED, asset_id)
-
-        device_registry = dr.async_get(self.hass)
-        device = device_registry.async_get_device(identifiers={(DOMAIN, asset_id)})
-        if device is not None:
-            device_registry.async_remove_device(device.id)
+        valid: set[str] = set()
+        changed = False
+        for asset_id in self.asset_ids():
+            asset = self._asset(asset_id)
+            for task_id in asset["tasks"]:
+                key = _key(asset_id, task_id)
+                valid.add(key)
+                if key not in self._history:
+                    # New tasks start counting from today, so they are not overdue.
+                    self._history[key] = {"last_date": today, "last_km": asset.get("odometer_km")}
+                    changed = True
+        for key in list(self._history):
+            if key not in valid:
+                del self._history[key]
+                changed = True
+        if changed:
+            await self._async_save()
 
     async def async_mark_done(self, asset_id: str, task_id: str) -> None:
         """Record that a task was done today, at the current odometer."""
-        asset = self._get_asset(asset_id)
-        task = self._get_task(asset, task_id)
-        task["last_date"] = self._today().isoformat()
-        task["last_km"] = asset.get("odometer_km")
+        self._task(asset_id, task_id)
+        self._history[_key(asset_id, task_id)] = {
+            "last_date": self._today().isoformat(),
+            "last_km": self.odometer(asset_id),
+        }
         await self._async_save()
         self.async_refresh()
 
     async def async_set_odometer(self, asset_id: str, odometer_km: float) -> None:
         """Update an asset's odometer. Rejects values below the last maintenance."""
-        asset = self._get_asset(asset_id)
-        for task in asset["tasks"].values():
-            if task.get("last_km") is not None and odometer_km < task["last_km"]:
+        asset = self._asset(asset_id)
+        for task_id in asset["tasks"]:
+            record = self._history.get(_key(asset_id, task_id), {})
+            last_km = record.get("last_km")
+            if last_km is not None and odometer_km < last_km:
                 raise ValueError(
                     "Odometer cannot be lower than the value recorded at the last maintenance"
                 )
-        asset["odometer_km"] = odometer_km
-        # First odometer reading becomes the baseline for km-based tasks.
-        for task in asset["tasks"].values():
-            if task.get("last_km") is None:
-                task["last_km"] = odometer_km
+        for task_id in asset["tasks"]:
+            record = self._history.setdefault(
+                _key(asset_id, task_id),
+                {"last_date": self._today().isoformat(), "last_km": None},
+            )
+            # First odometer reading becomes the baseline for km-based tasks.
+            if record.get("last_km") is None:
+                record["last_km"] = odometer_km
         await self._async_save()
+        self._update_asset(asset_id, {"odometer_km": odometer_km})
         self.async_refresh()
+
+    def _update_asset(self, asset_id: str, changes: dict[str, Any]) -> None:
+        sub = self.entry.subentries[asset_id]
+        self.hass.config_entries.async_update_subentry(
+            self.entry, sub, data={**dict(sub.data), **changes}
+        )
+
+    async def async_remove_asset_history(self, asset_id: str) -> None:
+        """Drop the history of an asset and its device, once its subentry is gone."""
+        for key in [k for k in self._history if k.startswith(f"{asset_id}:")]:
+            del self._history[key]
+        await self._async_save()
+        registry = dr.async_get(self.hass)
+        device = registry.async_get_device(identifiers={(DOMAIN, asset_id)})
+        if device is not None:
+            registry.async_remove_device(device.id)
 
     @callback
     def async_refresh(self) -> None:

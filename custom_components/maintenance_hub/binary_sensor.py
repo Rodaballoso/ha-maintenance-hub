@@ -7,11 +7,10 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, SIGNAL_ASSET_ADDED
+from .const import DOMAIN
 from .entity import MaintenanceTaskEntity, entity_unique_id
 from .store import MaintenanceStore
 
@@ -31,25 +30,16 @@ class MaintenanceOverdueSensor(MaintenanceTaskEntity, BinarySensorEntity):
         return self._status["overdue"]
 
 
-def _entities_for_asset(store: MaintenanceStore, asset_id: str) -> list[MaintenanceOverdueSensor]:
-    return [MaintenanceOverdueSensor(store, asset_id, tid) for tid in store.task_ids(asset_id)]
-
-
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Create overdue sensors for existing assets and for assets added later."""
+    """Create one overdue sensor per task, grouped under each asset."""
     store: MaintenanceStore = hass.data[DOMAIN]["store"]
-
-    entities: list[MaintenanceOverdueSensor] = []
     for asset_id in store.asset_ids():
-        entities.extend(_entities_for_asset(store, asset_id))
-    async_add_entities(entities)
-
-    @callback
-    def _on_asset_added(asset_id: str) -> None:
-        async_add_entities(_entities_for_asset(store, asset_id))
-
-    entry.async_on_unload(async_dispatcher_connect(hass, SIGNAL_ASSET_ADDED, _on_asset_added))
+        entities = [
+            MaintenanceOverdueSensor(store, asset_id, task_id)
+            for task_id in store.task_ids(asset_id)
+        ]
+        async_add_entities(entities, config_subentry_id=asset_id)
