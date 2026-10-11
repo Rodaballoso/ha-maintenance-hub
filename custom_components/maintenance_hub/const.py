@@ -21,9 +21,11 @@ STORAGE_KEY = f"{DOMAIN}.data"
 
 # Services
 SERVICE_ADD_ASSET = "add_asset"
+SERVICE_REMOVE_ASSET = "remove_asset"
 SERVICE_MARK_DONE = "mark_done"
 SERVICE_SET_ODOMETER = "set_odometer"
 
 # Dispatcher signals
 SIGNAL_ASSET_ADDED = f"{DOMAIN}_asset_added"
+SIGNAL_ASSET_REMOVED = f"{DOMAIN}_asset_removed"
 SIGNAL_UPDATED = f"{DOMAIN}_updated"

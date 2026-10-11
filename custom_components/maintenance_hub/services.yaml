@@ -1,6 +1,6 @@
 add_asset:
   name: Add asset
-  description: Add an asset and create its maintenance tasks from a template. The asset id is written to the Home Assistant log.
+  description: Add an asset and create its maintenance tasks from a template. The asset id is written to the Home Assistant log and shown in the attributes of its entities.
   fields:
     name:
       name: Name
@@ -23,6 +23,17 @@ add_asset:
           min: 0
           mode: box
           unit_of_measurement: km
+
+remove_asset:
+  name: Remove asset
+  description: Delete an asset, its device and all its entities. This cannot be undone.
+  fields:
+    asset_id:
+      name: Asset id
+      description: Id of the asset, shown in the attributes of its entities.
+      required: true
+      selector:
+        text:
 
 mark_done:
   name: Mark task done

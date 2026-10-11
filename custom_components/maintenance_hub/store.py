@@ -9,13 +9,16 @@ from typing import Any
 import uuid
 
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import (
     CATEGORY_EQUIPMENT,
+    DOMAIN,
     SIGNAL_ASSET_ADDED,
+    SIGNAL_ASSET_REMOVED,
     SIGNAL_UPDATED,
     STORAGE_KEY,
     STORAGE_VERSION,
@@ -78,12 +81,18 @@ class MaintenanceStore:
         """Return the task ids of an asset."""
         return list(self._get_asset(asset_id)["tasks"])
 
-    def display_name(self, asset_id: str, task_id: str) -> str:
-        """Return 'Asset - Task' in the installation language."""
+    def asset_summary(self, asset_id: str) -> tuple[str, str]:
+        """Return (asset name, template name) for device registration."""
         asset = self._get_asset(asset_id)
-        task = self._get_task(asset, task_id)
-        task_name = task["name_es"] if self.language == "es" and task.get("name_es") else task["name"]
-        return f"{asset['name']} - {task_name}"
+        template = self.templates.get(asset["asset_type"], {})
+        return asset["name"], template.get("name", asset["asset_type"])
+
+    def task_name(self, asset_id: str, task_id: str) -> str:
+        """Return the task name in the installation language."""
+        task = self._get_task(self._get_asset(asset_id), task_id)
+        if self.language == "es" and task.get("name_es"):
+            return task["name_es"]
+        return task["name"]
 
     def _get_asset(self, asset_id: str) -> dict[str, Any]:
         asset = self._assets.get(asset_id)
@@ -152,7 +161,9 @@ class MaintenanceStore:
                 if key in SUPPORTED_TRIGGERS
             }
             if not trigger:
-                _LOGGER.warning("Task %s in %s has no supported trigger", task.get("id"), asset_type)
+                _LOGGER.warning(
+                    "Task %s in %s has no supported trigger", task.get("id"), asset_type
+                )
                 continue
             tasks[task["id"]] = {
                 "name": task["name"],
@@ -174,6 +185,18 @@ class MaintenanceStore:
         await self._async_save()
         async_dispatcher_send(self.hass, SIGNAL_ASSET_ADDED, asset_id)
         return asset_id
+
+    async def async_remove_asset(self, asset_id: str) -> None:
+        """Delete an asset, its entities and its device."""
+        self._get_asset(asset_id)
+        del self._assets[asset_id]
+        await self._async_save()
+        async_dispatcher_send(self.hass, SIGNAL_ASSET_REMOVED, asset_id)
+
+        device_registry = dr.async_get(self.hass)
+        device = device_registry.async_get_device(identifiers={(DOMAIN, asset_id)})
+        if device is not None:
+            device_registry.async_remove_device(device.id)
 
     async def async_mark_done(self, asset_id: str, task_id: str) -> None:
         """Record that a task was done today, at the current odometer."""

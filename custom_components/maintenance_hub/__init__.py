@@ -20,6 +20,7 @@ from .const import (
     DOMAIN,
     SERVICE_ADD_ASSET,
     SERVICE_MARK_DONE,
+    SERVICE_REMOVE_ASSET,
     SERVICE_SET_ODOMETER,
 )
 from .store import MaintenanceStore
@@ -37,6 +38,7 @@ ADD_ASSET_SCHEMA = vol.Schema(
         vol.Optional("odometer_km"): vol.All(vol.Coerce(float), vol.Range(min=0)),
     }
 )
+REMOVE_ASSET_SCHEMA = vol.Schema({vol.Required("asset_id"): cv.string})
 MARK_DONE_SCHEMA = vol.Schema(
     {vol.Required("asset_id"): cv.string, vol.Required("task_id"): cv.string}
 )
@@ -100,6 +102,13 @@ def _register_services(hass: HomeAssistant, store: MaintenanceStore) -> None:
             raise HomeAssistantError(str(err)) from err
         _LOGGER.info("Added maintenance asset %s with id %s", call.data["name"], asset_id)
 
+    async def handle_remove_asset(call: ServiceCall) -> None:
+        try:
+            await store.async_remove_asset(call.data["asset_id"])
+        except ValueError as err:
+            raise HomeAssistantError(str(err)) from err
+        _LOGGER.info("Removed maintenance asset %s", call.data["asset_id"])
+
     async def handle_mark_done(call: ServiceCall) -> None:
         try:
             await store.async_mark_done(call.data["asset_id"], call.data["task_id"])
@@ -116,6 +125,9 @@ def _register_services(hass: HomeAssistant, store: MaintenanceStore) -> None:
 
     hass.services.async_register(
         DOMAIN, SERVICE_ADD_ASSET, handle_add_asset, schema=ADD_ASSET_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_REMOVE_ASSET, handle_remove_asset, schema=REMOVE_ASSET_SCHEMA
     )
     hass.services.async_register(
         DOMAIN, SERVICE_MARK_DONE, handle_mark_done, schema=MARK_DONE_SCHEMA

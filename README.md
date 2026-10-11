@@ -10,7 +10,8 @@ Preventive maintenance tracking for Home Assistant: equipment (boiler, heat pump
 - Maintenance tasks created from **templates** in YAML, so anyone can contribute a new asset type without touching code.
 - Triggers by **time** (every N days or months) and by **distance** (km, for vehicles).
 - Per task: a sensor with the remaining days (or km), a sensor for "overdue", and a button to mark it as done.
-- Services: `add_asset`, `mark_done` and `set_odometer`.
+- Services: `add_asset`, `remove_asset`, `mark_done` and `set_odometer`.
+- Each asset is a Home Assistant device, so its entities are grouped under it.
 - Entity names follow the Home Assistant language (English or Spanish).
 
 ## Usage
@@ -65,7 +66,8 @@ Seguimiento de mantenimiento preventivo para Home Assistant: equipamiento (calde
 - Tareas de mantenimiento creadas desde **plantillas** en YAML, para que cualquiera pueda aportar un nuevo tipo de activo sin tocar código.
 - Disparadores por **tiempo** (cada N días o meses) y por **distancia** (km, para vehículos).
 - Por tarea: un sensor con los días (o km) restantes, un sensor de "vencida" y un botón para marcarla como hecha.
-- Servicios: `add_asset`, `mark_done` y `set_odometer`.
+- Servicios: `add_asset`, `remove_asset`, `mark_done` y `set_odometer`.
+- Cada activo es un dispositivo de Home Assistant, así que sus entidades aparecen agrupadas bajo él.
 - Los nombres de las entidades siguen el idioma de Home Assistant (inglés o español).
 
 ## Uso

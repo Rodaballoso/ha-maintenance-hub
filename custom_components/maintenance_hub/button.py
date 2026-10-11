@@ -20,7 +20,7 @@ class MaintenanceDoneButton(MaintenanceTaskEntity, ButtonEntity):
 
     def __init__(self, store: MaintenanceStore, asset_id: str, task_id: str) -> None:
         super().__init__(store, asset_id, task_id)
-        self._attr_name = f"{store.display_name(asset_id, task_id)} - {store.label('done')}"
+        self._attr_name = f"{store.task_name(asset_id, task_id)} - {store.label('done')}"
         self._attr_unique_id = entity_unique_id(asset_id, task_id, "done")
 
     async def async_press(self) -> None:

@@ -23,7 +23,7 @@ class MaintenanceOverdueSensor(MaintenanceTaskEntity, BinarySensorEntity):
 
     def __init__(self, store: MaintenanceStore, asset_id: str, task_id: str) -> None:
         super().__init__(store, asset_id, task_id)
-        self._attr_name = f"{store.display_name(asset_id, task_id)} - {store.label('overdue')}"
+        self._attr_name = f"{store.task_name(asset_id, task_id)} - {store.label('overdue')}"
         self._attr_unique_id = entity_unique_id(asset_id, task_id, "overdue")
 
     @property
