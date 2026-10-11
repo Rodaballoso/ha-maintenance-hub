@@ -21,6 +21,9 @@ from .templates import build_asset_data
 
 UNITS = (TRIGGER_MONTHS, TRIGGER_DAYS, TRIGGER_KM)
 
+# Asset types offered in the "Add" menu, in order. Each needs a template file.
+SHIPPED_ASSET_TYPES = ("boiler", "nas", "car", "motorcycle")
+
 
 class MaintenanceHubConfigFlow(ConfigFlow, domain=DOMAIN):
     """Add Maintenance Hub from the UI. Only one instance is allowed."""
@@ -46,19 +49,10 @@ class MaintenanceHubConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(step_id="user")
 
 
-def _asset_schema(templates: dict[str, dict]) -> vol.Schema:
+def _name_schema() -> vol.Schema:
     return vol.Schema(
         {
             vol.Required("name"): selector.TextSelector(),
-            vol.Required("asset_type"): selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=[
-                        selector.SelectOptionDict(value=key, label=template.get("name", key))
-                        for key, template in templates.items()
-                    ],
-                    mode=selector.SelectSelectorMode.DROPDOWN,
-                )
-            ),
             vol.Optional("odometer_km"): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=0, mode=selector.NumberSelectorMode.BOX, unit_of_measurement="km"
@@ -68,34 +62,42 @@ def _asset_schema(templates: dict[str, dict]) -> vol.Schema:
     )
 
 
-def _interval_fields(tasks: dict[str, dict[str, Any]]) -> dict[vol.Optional, selector.Selector]:
-    """One optional number field per task and unit, e.g. oil_change_km."""
-    fields: dict[Any, Any] = {}
-    for task_id, task in tasks.items():
-        for unit in UNITS:
-            fields[
-                vol.Optional(
-                    f"{task_id}_{unit}",
-                    description={"suggested_value": task["trigger"].get(unit)},
-                )
-            ] = selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    min=0, mode=selector.NumberSelectorMode.BOX
-                )
-            )
-    return fields
+def _interval_selector() -> selector.NumberSelector:
+    return selector.NumberSelector(
+        selector.NumberSelectorConfig(min=0, mode=selector.NumberSelectorMode.BOX)
+    )
 
 
 def _task_summary(tasks: dict[str, dict[str, Any]]) -> str:
     lines = []
     for task_id, task in tasks.items():
-        units = ", ".join(f"{unit}" for unit in UNITS if unit in task["trigger"])
+        units = ", ".join(unit for unit in UNITS if unit in task["trigger"])
         lines.append(f"- {task_id}: {task['name']} ({units})")
     return "\n".join(lines)
 
 
+def _parse_trigger(user_input: dict[str, Any], prefix: str) -> dict[str, float | int]:
+    """Read the interval fields. `prefix` is '<task_id>' or 'new_task'."""
+    trigger: dict[str, float | int] = {}
+    for unit in UNITS:
+        value = user_input.get(f"{prefix}_{unit}")
+        if value:
+            trigger[unit] = float(value) if unit == TRIGGER_KM else int(value)
+    return trigger
+
+
+def _new_task_id(name: str, existing: dict[str, Any]) -> str:
+    """Build a task id from its name, unique within the asset."""
+    base = "".join(char if char.isalnum() else "_" for char in name.lower()).strip("_") or "task"
+    task_id, counter = base, 2
+    while task_id in existing:
+        task_id = f"{base}_{counter}"
+        counter += 1
+    return task_id
+
+
 class AssetSubentryFlow(ConfigSubentryFlow):
-    """Add or edit an asset: name, type, odometer and task intervals."""
+    """Add an asset (chosen from a menu) or edit its name, intervals and tasks."""
 
     def _templates(self) -> dict[str, dict]:
         return self.hass.data[DOMAIN]["templates"]
@@ -103,34 +105,37 @@ class AssetSubentryFlow(ConfigSubentryFlow):
     def _reload(self) -> None:
         self.hass.config_entries.async_schedule_reload(self._get_entry().entry_id)
 
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> SubentryFlowResult:
-        """Add a new asset from a template."""
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
+        """Show the menu of asset types to add."""
         templates = self._templates()
-        errors: dict[str, str] = {}
+        options = [f"add_{asset_type}" for asset_type in SHIPPED_ASSET_TYPES if asset_type in templates]
+        if not options:
+            return self.async_abort(reason="unknown_template")
+        return self.async_show_menu(step_id="user", menu_options=options)
+
+    async def _async_add_asset(
+        self, asset_type: str, user_input: dict[str, Any] | None
+    ) -> SubentryFlowResult:
+        template = self._templates().get(asset_type)
+        if template is None:
+            return self.async_abort(reason="unknown_template")
 
         if user_input is not None:
-            template = templates.get(user_input["asset_type"])
-            if template is None:
-                return self.async_abort(reason="unknown_template")
             data = build_asset_data(
-                template,
-                user_input["name"],
-                user_input["asset_type"],
-                user_input.get("odometer_km"),
+                template, user_input["name"], asset_type, user_input.get("odometer_km")
             )
             self._reload()
             return self.async_create_subentry(title=user_input["name"], data=data)
 
         return self.async_show_form(
-            step_id="user", data_schema=_asset_schema(templates), errors=errors
+            step_id=f"add_{asset_type}",
+            data_schema=_name_schema(),
         )
 
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
-        """Edit the name and the maintenance intervals of an asset."""
+        """Edit the name, the intervals of each task, and add new tasks."""
         entry = self._get_entry()
         subentry = self._get_reconfigure_subentry()
         tasks: dict[str, dict[str, Any]] = {
@@ -141,14 +146,19 @@ class AssetSubentryFlow(ConfigSubentryFlow):
         if user_input is not None:
             new_tasks: dict[str, dict[str, Any]] = {}
             for task_id, task in tasks.items():
-                trigger: dict[str, float | int] = {}
-                for unit in UNITS:
-                    value = user_input.get(f"{task_id}_{unit}")
-                    if value:
-                        trigger[unit] = float(value) if unit == TRIGGER_KM else int(value)
+                trigger = _parse_trigger(user_input, task_id)
                 if not trigger:
                     errors["base"] = "no_trigger"
                 new_tasks[task_id] = {**task, "trigger": trigger}
+
+            new_name = user_input.get("new_task_name", "").strip()
+            if new_name:
+                trigger = _parse_trigger(user_input, "new_task")
+                if not trigger:
+                    errors["base"] = "no_trigger"
+                else:
+                    task_id = _new_task_id(new_name, new_tasks)
+                    new_tasks[task_id] = {"name": new_name, "name_es": None, "trigger": trigger}
 
             if not errors:
                 data = {**dict(subentry.data), "name": user_input["name"], "tasks": new_tasks}
@@ -158,15 +168,38 @@ class AssetSubentryFlow(ConfigSubentryFlow):
                 self._reload()
                 return self.async_abort(reason="reconfigure_successful")
 
-        schema = vol.Schema(
-            {
-                vol.Required("name", default=subentry.data["name"]): selector.TextSelector(),
-                **_interval_fields(tasks),
-            }
-        )
+        fields: dict[Any, Any] = {
+            vol.Required("name", default=subentry.data["name"]): selector.TextSelector(),
+        }
+        for task_id, task in tasks.items():
+            for unit in UNITS:
+                fields[
+                    vol.Optional(
+                        f"{task_id}_{unit}",
+                        description={"suggested_value": task["trigger"].get(unit)},
+                    )
+                ] = _interval_selector()
+        fields[vol.Optional("new_task_name")] = selector.TextSelector()
+        for unit in UNITS:
+            fields[vol.Optional(f"new_task_{unit}")] = _interval_selector()
+
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=schema,
+            data_schema=vol.Schema(fields),
             errors=errors,
             description_placeholders={"tasks": _task_summary(tasks)},
         )
+
+
+def _make_add_step(asset_type: str):
+    """Build the step that adds one asset type (add_boiler, add_nas, ...)."""
+
+    async def _step(self: AssetSubentryFlow, user_input: dict[str, Any] | None = None):
+        return await self._async_add_asset(asset_type, user_input)
+
+    _step.__name__ = f"async_step_add_{asset_type}"
+    return _step
+
+
+for _asset_type in SHIPPED_ASSET_TYPES:
+    setattr(AssetSubentryFlow, f"async_step_add_{_asset_type}", _make_add_step(_asset_type))

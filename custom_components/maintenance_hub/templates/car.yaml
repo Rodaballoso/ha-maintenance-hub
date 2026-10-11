@@ -1,0 +1,21 @@
+asset_type: car
+category: vehicle
+name: Car
+name_es: Coche
+tasks:
+  - id: oil_change
+    name: Oil change
+    name_es: Cambio de aceite
+    trigger: { km: 15000, months: 12 }
+  - id: air_filter
+    name: Air filter
+    name_es: Filtro de aire
+    trigger: { km: 30000 }
+  - id: brake_fluid
+    name: Brake fluid
+    name_es: Líquido de frenos
+    trigger: { months: 24 }
+  - id: inspection
+    name: Periodic inspection
+    name_es: Inspección técnica (ITV)
+    trigger: { months: 24 }
